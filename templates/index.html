@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Chat Style Mimicker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f0f2f5;
+            padding: 20px;
+        }
+        .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        .message-bubble {
+            background-color: #e1ffc7;
+            border-radius: 10px;
+            padding: 10px 15px;
+            margin: 10px 0;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .error {
+            color: #dc3545;
+            margin: 10px 0;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <h1 class="text-center mb-4">🤖 WhatsApp Chat Style Mimicker</h1>
+        
+        <!-- Subir archivo -->
+        <div class="mb-4">
+            <h3>📁 Subir chat</h3>
+            <div class="alert alert-info">
+                1. Exporta un chat de WhatsApp (sin medios)<br>
+                2. Selecciona el archivo .txt exportado
+            </div>
+            <input type="file" class="form-control" id="chatFile" accept=".txt">
+            <div id="uploadError" class="error"></div>
+        </div>
+
+        <!-- Seleccionar miembro -->
+        <div id="memberSection" class="mb-4" style="display: none;">
+            <h3>👥 Top 15 miembros más activos</h3>
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Miembro</th>
+                            <th>Mensajes</th>
+                            <th>Porcentaje</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="memberTable">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Generar mensaje -->
+        <div id="generateSection" class="mb-4" style="display: none;">
+            <h3>💬 Generar mensaje</h3>
+            <div class="alert alert-info mb-3">
+                <strong>Miembro seleccionado:</strong> <span id="selectedMemberName"></span>
+            </div>
+            <div class="mb-3">
+                <label for="promptInput" class="form-label">Escribe un mensaje para generar una respuesta:</label>
+                <input type="text" class="form-control" id="promptInput" placeholder="¿Qué mensaje quieres que responda?">
+            </div>
+            <button class="btn btn-primary" id="generateBtn">Generar respuesta</button>
+            <div id="generateError" class="error"></div>
+        </div>
+
+        <!-- Respuesta generada -->
+        <div id="responseSection" class="mb-4" style="display: none;">
+            <h3>🤖 Respuesta generada</h3>
+            <div class="message-bubble" id="responseText"></div>
+        </div>
+
+        <!-- Loading spinner -->
+        <div class="loading" id="loading">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2">Procesando...</p>
+        </div>
+    </div>
+
+    <script>
+        // Elementos del DOM
+        const chatFile = document.getElementById('chatFile');
+        const memberSection = document.getElementById('memberSection');
+        const memberTable = document.getElementById('memberTable');
+        const generateSection = document.getElementById('generateSection');
+        const promptInput = document.getElementById('promptInput');
+        const generateBtn = document.getElementById('generateBtn');
+        const responseSection = document.getElementById('responseSection');
+        const responseText = document.getElementById('responseText');
+        const loading = document.getElementById('loading');
+        const uploadError = document.getElementById('uploadError');
+        const generateError = document.getElementById('generateError');
+        const selectedMemberName = document.getElementById('selectedMemberName');
+
+        // Variable para almacenar el miembro seleccionado
+        let selectedMember = null;
+
+        // Manejar subida de archivo
+        chatFile.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Mostrar loading
+            loading.style.display = 'block';
+            uploadError.style.display = 'none';
+            memberSection.style.display = 'none';
+            generateSection.style.display = 'none';
+            responseSection.style.display = 'none';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Llenar la tabla con los miembros
+                memberTable.innerHTML = '';
+                
+                data.members.forEach(member => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${member.rank}º</td>
+                        <td>${member.name}</td>
+                        <td>${member.messages.toLocaleString()}</td>
+                        <td>${member.percentage}%</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary select-member" 
+                                    data-member="${member.name}">
+                                Seleccionar
+                            </button>
+                        </td>
+                    `;
+                    memberTable.appendChild(row);
+                });
+
+                // Agregar event listeners a los botones
+                document.querySelectorAll('.select-member').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const memberName = button.dataset.member;
+                        selectedMemberName.textContent = memberName;
+                        generateSection.style.display = 'block';
+                        responseSection.style.display = 'none';
+                        selectedMember = memberName;
+                    });
+                });
+
+                // Mostrar sección de miembros
+                memberSection.style.display = 'block';
+
+            } catch (error) {
+                uploadError.textContent = error.message;
+                uploadError.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+
+        // Manejar generación de mensaje
+        generateBtn.addEventListener('click', async () => {
+            const prompt = promptInput.value.trim();
+
+            if (!selectedMember || !prompt) {
+                generateError.textContent = 'Por favor, selecciona un miembro y escribe un mensaje';
+                generateError.style.display = 'block';
+                return;
+            }
+
+            // Mostrar loading
+            loading.style.display = 'block';
+            generateError.style.display = 'none';
+            responseSection.style.display = 'none';
+
+            try {
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        member: selectedMember, 
+                        prompt: prompt 
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Mostrar respuesta
+                responseText.textContent = data.response;
+                responseSection.style.display = 'block';
+
+            } catch (error) {
+                generateError.textContent = error.message;
+                generateError.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html> 
