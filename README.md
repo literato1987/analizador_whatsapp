@@ -1,114 +1,89 @@
-# 📊 Analizador de Chat de WhatsApp
+# WhatsApp Chat Analyzer
 
-Una aplicación web desarrollada con Streamlit que permite analizar chats de WhatsApp y generar visualizaciones estadísticas interactivas.
+Este proyecto analiza chats de WhatsApp y genera visualizaciones y estadísticas. Incluye dos versiones:
+- Una aplicación web (app.py)
+- Un notebook interactivo (whatsapp_style_analyzer.ipynb)
 
-## 🌟 Características
+## 🚀 Funcionalidades
 
-- 📱 Análisis de chats exportados de WhatsApp
-- 📊 Visualizaciones estadísticas:
+- Detección automática del formato de chat (iPhone/Android)
+- Análisis de patrones de mensajes
+- Visualizaciones:
   - Mensajes por persona
   - Actividad diaria
   - Distribución de tipos de mensajes
   - Actividad por hora
-  - Actividad semanal
-- 🔤 Nube de palabras personalizada por miembro
-- 📈 Estadísticas detalladas por participante
-
-## 🚀 Instalación Local
-
-1. Clona el repositorio:
-```bash
-git clone https://github.com/tu-usuario/whatsapp-chat-analyzer.git
-cd whatsapp-chat-analyzer
-```
-
-2. Crea un entorno virtual e instálalo:
-```bash
-python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
-```
-
-3. Instala las dependencias:
-```bash
-pip install -r requirements.txt
-```
+  - Actividad por día de la semana
+  - Nube de palabras general y por miembro
+- Análisis de estilo de escritura por miembro
+- Generación de mensajes imitando el estilo de cada miembro (usando OpenAI)
 
 ## 📋 Requisitos
 
-```txt
-streamlit==1.31.1
-pandas==2.2.0
-matplotlib==3.8.2
-seaborn==0.13.2
-wordcloud==1.9.3
+```
+python 3.8+
+pandas
+matplotlib
+seaborn
+wordcloud
+nltk
+openai
+python-dotenv
+flask (para la versión web)
 ```
 
-## 🎯 Uso
+## 🛠️ Instalación
 
-### Ejecutar Localmente
-
-1. Inicia la aplicación:
+1. Clona el repositorio
+2. Instala las dependencias:
 ```bash
-streamlit run streamlit_app.py
+pip install -r requirements.txt
+```
+3. Para usar la generación de mensajes, crea un archivo `.env` con tu API key de OpenAI:
+```
+OPENAI_API_KEY=tu_api_key_aquí
 ```
 
-2. Abre tu navegador (se abrirá automáticamente) en `http://localhost:8501`
+## 💻 Uso
 
-3. Exporta un chat de WhatsApp:
-   - Abre WhatsApp
-   - Ve al chat que quieres analizar
-   - Menú > Más > Exportar chat
-   - Selecciona "Sin medios"
+### Versión Web (app.py)
+1. Ejecuta la aplicación:
+```bash
+python app.py
+```
+2. Abre tu navegador en `http://localhost:5000`
+3. Selecciona el tipo de dispositivo (iPhone/Android)
+4. Sube tu archivo de chat
+5. Explora las visualizaciones y estadísticas
 
-4. Sube el archivo .txt en la aplicación
+### Versión Notebook (whatsapp_style_analyzer.ipynb)
+1. Coloca tu archivo de chat exportado en la misma carpeta
+2. Abre el notebook en Jupyter/VSCode
+3. Ejecuta las celdas en orden
+4. Explora las visualizaciones y análisis
 
-### Compartir la Aplicación
+## 📱 Formatos de Chat Soportados
 
-Hay dos formas de compartir la aplicación:
+- iPhone: `[dd/mm/yy, HH:MM:SS] Nombre: Mensaje`
+- Android: `dd/mm/yy, HH:MM - Nombre: Mensaje`
 
-#### 1. Compartir mediante Streamlit Cloud (Recomendado)
+## 🤖 Generación de Mensajes
 
-1. Crea una cuenta en [share.streamlit.io](https://share.streamlit.io)
-2. Conecta tu repositorio de GitHub
-3. Despliega la aplicación con un clic
-4. Comparte la URL pública con otros usuarios
+El proyecto puede generar mensajes imitando el estilo de escritura de cada miembro usando GPT-3.5. Para usar esta función:
+1. Asegúrate de tener configurada tu API key de OpenAI
+2. Ejecuta la sección de generación de mensajes en el notebook
+3. El sistema analizará el estilo de cada miembro y generará mensajes similares
 
-#### 2. Compartir para Uso Local
+## 📊 Visualizaciones Disponibles
 
-1. Comparte el repositorio de GitHub
-2. El usuario debe:
-   - Clonar el repositorio
-   - Instalar Python 3.8 o superior
-   - Ejecutar los comandos de instalación
-   - Iniciar la aplicación localmente
+- Distribución de mensajes por miembro
+- Actividad temporal (diaria/semanal)
+- Tipos de mensajes (texto/multimedia)
+- Patrones de actividad por hora
+- Nubes de palabras (general y por miembro)
 
-## 📊 Visualizaciones
+## 🔒 Privacidad
 
-- **Mensajes por Persona**: Gráfico de barras mostrando el número de mensajes por participante
-- **Actividad Diaria**: Línea temporal de la actividad del chat
-- **Tipos de Mensajes**: Gráfico circular mostrando la distribución de mensajes de texto vs multimedia
-- **Actividad por Hora**: Distribución de mensajes por hora del día
-- **Actividad Semanal**: Distribución de mensajes por día de la semana
-- **Nube de Palabras**: Visualización de las palabras más usadas por cada participante
-
-## 🛠️ Tecnologías Utilizadas
-
-- **Framework**: Streamlit
-- **Visualización**: Matplotlib, Seaborn, WordCloud
-- **Procesamiento de Datos**: Pandas
-- **Control de Versiones**: Git
-
-## 📝 Notas
-
-- La aplicación procesa solo archivos de texto (.txt) exportados de WhatsApp
-- Las imágenes y otros archivos multimedia no se incluyen en el análisis
-- Se filtran palabras comunes y stopwords en español para la nube de palabras
-- Los datos se procesan localmente y no se almacenan en ningún servidor
-
-## 🤝 Contribuir
-
-Las contribuciones son bienvenidas. Por favor, abre un issue primero para discutir los cambios que te gustaría hacer.
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles. 
+- Los chats se procesan localmente
+- No se almacena ninguna información en servidores externos
+- La única conexión externa es con OpenAI para la generación de mensajes (opcional) 
