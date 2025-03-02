@@ -72,9 +72,19 @@
             <h3>📁 Subir chat</h3>
             <div class="alert alert-info">
                 1. Exporta un chat de WhatsApp (sin medios)<br>
-                2. Selecciona el archivo .txt exportado
+                2. Selecciona el dispositivo desde el que exportaste<br>
+                3. Selecciona el archivo .txt exportado
             </div>
-            <input type="file" class="form-control" id="chatFile" accept=".txt">
+            <div class="mb-3">
+                <label for="deviceType" class="form-label">Dispositivo de exportación:</label>
+                <select class="form-select" id="deviceType">
+                    <option value="">Selecciona el dispositivo...</option>
+                    <option value="android">Android</option>
+                    <option value="iphone">iPhone</option>
+                </select>
+            </div>
+            <input type="file" class="form-control" id="chatFile" accept=".txt" disabled>
+            <small class="text-muted">Selecciona primero el dispositivo para habilitar la subida de archivo</small>
             <div id="uploadError" class="error"></div>
         </div>
 
@@ -112,6 +122,15 @@
                     <div class="plot-container">
                         <h4>Actividad Semanal</h4>
                         <img id="weeklyActivity" alt="Actividad semanal">
+                    </div>
+                </div>
+            </div>
+            <!-- Nueva sección para la nube de palabras general -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="plot-container">
+                        <h4>🔤 Palabras más usadas en el grupo</h4>
+                        <img id="groupWordcloud" alt="Nube de palabras del grupo">
                     </div>
                 </div>
             </div>
@@ -190,16 +209,34 @@
             document.getElementById('messageTypes').src = plots.message_types;
             document.getElementById('hourlyActivity').src = plots.hourly_activity;
             document.getElementById('weeklyActivity').src = plots.weekly_activity;
+            document.getElementById('groupWordcloud').src = plots.group_wordcloud;
             document.getElementById('statsContainer').style.display = 'block';
         }
+
+        // Event listener para selección de dispositivo
+        document.getElementById('deviceType').addEventListener('change', (e) => {
+            const fileInput = document.getElementById('chatFile');
+            fileInput.disabled = !e.target.value;
+            if (!e.target.value) {
+                fileInput.value = '';
+                hideError('uploadError');
+            }
+        });
         
         // Event listener para subir archivo
         document.getElementById('chatFile').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
             
+            const deviceType = document.getElementById('deviceType').value;
+            if (!deviceType) {
+                showError('uploadError', 'Por favor, selecciona el dispositivo de exportación');
+                return;
+            }
+            
             const formData = new FormData();
             formData.append('file', file);
+            formData.append('device_type', deviceType);
             
             showLoading();
             hideError('uploadError');

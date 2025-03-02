@@ -11,9 +11,64 @@ from collections import Counter
 import base64
 from io import BytesIO
 from datetime import datetime
+import nltk
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('stopwords')
+from nltk.corpus import stopwords
 
 # Configuración adicional de matplotlib
 plt.ioff()  # Desactivar modo interactivo
+
+# Definir conjunto global de palabras a excluir
+EXCLUDED_WORDS = {
+    'todo', 'porque', 'tiene', 'multimedia', 'omitido', 
+    '<multimedia', 'omitido>', 'imagen', 'video', 'audio', 
+    'sticker', 'gif', 'documento', 'eliminado', 'omitted',
+    'image', 'para', 'pero', 'este', 'esta', 'esto', 'como',
+    'cuando', 'donde', 'media', '<image', 'media', 'omitted',
+    'ahora', 'algo', 'aquí', 'así', 'aunque', 'bien', 'cada',
+    'casi', 'como', 'cual', 'debe', 'desde', 'después',
+    'dice', 'dijo', 'donde', 'entonces', 'entre', 'está',
+    'están', 'había', 'hace', 'hasta', 'hola', 'luego',
+    'mejor', 'menos', 'mismo', 'mucho', 'nada', 'otro',
+    'pues', 'quién', 'sabe', 'sido', 'sine', 'sino',
+    'sobre', 'solo', 'también', 'tanto', 'tengo', 'todas',
+    'todos', 'vamos', 'vaya', 'verdad', 'puede', 'pudo',
+    'quiere', 'sería', 'hacer', 'hecho', 'siendo', 'tenía',
+    'través', 'primera', 'según', 'ningún', 'manera', 'misma',
+    'image>', 'omitted>', 'attached:', 'image', 'attached','porq','bueno','gente','creo','cosa','siempre','claro','año','cierto','cómo','gran','toda','años','decir','dicho','tiempo','parece'
+}
+
+def filter_words(messages):
+    """
+    Filtra las palabras de una lista de mensajes aplicando todos los criterios de exclusión.
+    
+    Args:
+        messages: Lista de mensajes de texto
+        
+    Returns:
+        Lista de palabras filtradas
+    """
+    # Obtener stopwords en español
+    stop_words = set(stopwords.words('spanish'))
+    stop_words.update(EXCLUDED_WORDS)
+    
+    # Procesar y filtrar palabras
+    words = []
+    for message in messages:
+        message_words = message.lower().split()
+        filtered_words = [word for word in message_words 
+                        if word not in stop_words
+                        and len(word) > 3 
+                        and not word.startswith('http')
+                        and not word.startswith('<')
+                        and not word.endswith('>')
+                        and not any(char.isdigit() for char in word)]
+        words.extend(filtered_words)
+    
+    return words
 
 app = Flask(__name__)
 
@@ -23,67 +78,134 @@ chat_data = {
     'members': None
 }
 
-def process_chat_file(file_content):
+def process_chat_file(file_content, device_type):
     """Procesa el contenido del archivo de chat"""
-    patterns = [
-        r'(\d{1,2}/\d{1,2}/\d{2,4},\s\d{1,2}:\d{2})\s-\s([^:]+):\s(.+)',
-        r'(\d{1,2}/\d{1,2}/\d{2,4},\s\d{1,2}:\d{2}\s[APMapm]{2})\s-\s([^:]+):\s(.+)',
-        r'\[(\d{1,2}/\d{1,2}/\d{2,4}\s\d{1,2}:\d{2}:\d{2})\]\s([^:]+):\s(.+)'
-    ]
+    print(f"Procesando archivo con tipo de dispositivo: {device_type}")
+    
+    # Patrones específicos para cada dispositivo
+    patterns = {
+        'android': [
+            # Formato Android: "dd/mm/yy, HH:MM - Nombre: Mensaje"
+            r'(\d{1,2}/\d{1,2}/\d{2,4},\s\d{1,2}:\d{2})\s-\s([^:]+):\s(.+)',
+            # Formato Android AM/PM: "dd/mm/yy, HH:MM AM/PM - Nombre: Mensaje"
+            r'(\d{1,2}/\d{1,2}/\d{2,4},\s\d{1,2}:\d{2}\s[APMapm]{2})\s-\s([^:]+):\s(.+)'
+        ],
+        'iphone': [
+            # Formato iPhone con segundos: "[dd/m/yy, HH:MM:SS] Nombre: Mensaje"
+            r'\[(\d{1,2}/\d{1,2}/\d{2},\s\d{1,2}:\d{2}:\d{2})\]\s([^:]+):\s(.+)',
+            # Formato iPhone sin segundos: "[dd/m/yy, HH:MM] Nombre: Mensaje"
+            r'\[(\d{1,2}/\d{1,2}/\d{2},\s\d{1,2}:\d{2})\]\s([^:]+):\s(.+)'
+        ]
+    }
     
     matches = []
     used_pattern = None
+    date_format = None
     
-    for pattern in patterns:
+    # Seleccionar patrones según el dispositivo
+    device_patterns = patterns.get(device_type, [])
+    if not device_patterns:
+        print(f"Error: Tipo de dispositivo no válido - {device_type}")
+        return None, None, "Tipo de dispositivo no válido"
+    
+    # Imprimir las primeras líneas del archivo para depuración
+    print("Primeras 3 líneas del archivo:")
+    for line in file_content.split('\n')[:3]:
+        print(f"LÍNEA: {line}")
+    
+    for pattern in device_patterns:
+        print(f"Probando patrón: {pattern}")
         matches = re.findall(pattern, file_content, re.MULTILINE)
         if matches:
             used_pattern = pattern
             print(f"✅ Patrón encontrado: {pattern}")
             print(f"Mensajes encontrados: {len(matches)}")
+            print(f"Ejemplo de coincidencia: {matches[0]}")
+            
+            # Determinar el formato de fecha basado en el patrón encontrado
+            sample_date = matches[0][0]
+            print(f"Fecha de ejemplo: {sample_date}")
+            
+            if device_type == 'iphone':
+                if ':' in sample_date.split()[1] and len(sample_date.split()[1].split(':')) == 3:  # Si tiene segundos
+                    date_format = '%d/%m/%y, %H:%M:%S'
+                else:
+                    date_format = '%d/%m/%y, %H:%M'
+            else:  # Android
+                if 'AM' in sample_date or 'PM' in sample_date:
+                    date_format = '%d/%m/%y, %I:%M %p'
+                else:
+                    date_format = '%d/%m/%y, %H:%M'
+            print(f"Formato de fecha detectado: {date_format}")
             break
     
     if not matches:
-        return None, None, "No se encontró un patrón válido en el archivo"
+        print(f"No se encontraron coincidencias para ningún patrón de {device_type}")
+        return None, None, f"No se encontró un patrón válido para el formato de {device_type}"
     
     # Crear DataFrame
     df = pd.DataFrame(matches, columns=['datetime', 'sender', 'message'])
     
-    # Convertir fechas a datetime
-    df['datetime'] = pd.to_datetime(df['datetime'], format='%d/%m/%y, %H:%M')
-    
-    # Extraer hora y día de la semana
-    df['hour'] = df['datetime'].dt.hour
-    df['day_of_week'] = df['datetime'].dt.day_name()
-    
-    # Identificar tipo de mensaje
-    df['type'] = df['message'].apply(lambda x: 'media' if '<Multimedia omitido>' in x else 'text')
-    
-    # Obtener miembros y estadísticas
-    members = df['sender'].unique().tolist()
-    message_counts = df['sender'].value_counts()
-    
-    # Crear información de miembros
-    members_info = []
-    total_messages = len(df)
-    
-    for member in members:
-        member_messages = df[df['sender'] == member]
-        member_count = len(member_messages)
+    try:
+        # Limpiar la fecha si es necesario
+        if device_type == 'iphone':
+            df['datetime'] = df['datetime'].str.replace('[', '').str.replace(']', '')
+            # Intentar primero con el formato que incluye coma
+            try:
+                df['datetime'] = pd.to_datetime(df['datetime'], format=date_format)
+            except ValueError:
+                # Si falla, intentar sin la coma
+                date_format = date_format.replace(', ', ' ')
+                df['datetime'] = pd.to_datetime(df['datetime'], format=date_format)
+        else:
+            df['datetime'] = pd.to_datetime(df['datetime'], format=date_format)
         
-        # Obtener palabras más frecuentes
-        text_messages = member_messages[member_messages['type'] == 'text']['message'].tolist()
-        words = ' '.join(text_messages).lower().split()
-        word_freq = Counter([w for w in words if len(w) > 3])
-        top_words = word_freq.most_common(3)
+        # Extraer hora y día de la semana
+        df['hour'] = df['datetime'].dt.hour
+        df['day_of_week'] = df['datetime'].dt.day_name()
         
-        members_info.append({
-            'name': member,
-            'messages': member_count,
-            'percentage': round(member_count / total_messages * 100, 1),
-            'top_words': top_words
-        })
-    
-    return df, members_info, None
+        # Identificar tipo de mensaje según el dispositivo
+        media_patterns = {
+            'android': '<Multimedia omitido>',
+            'iphone': 'Media omitted'
+        }
+        media_text = media_patterns.get(device_type, '<Multimedia omitido>')
+        df['type'] = df['message'].apply(lambda x: 'media' if media_text in x else 'text')
+        
+        # Obtener miembros y estadísticas
+        members = df['sender'].unique().tolist()
+        message_counts = df['sender'].value_counts()
+        
+        # Crear información de miembros
+        members_info = []
+        total_messages = len(df)
+        
+        for member in members:
+            member_messages = df[df['sender'] == member]
+            member_count = len(member_messages)
+            
+            # Obtener palabras más frecuentes
+            text_messages = member_messages[member_messages['type'] == 'text']['message'].tolist()
+            
+            # Filtrar palabras usando la función auxiliar
+            words = filter_words(text_messages)
+            
+            # Obtener las palabras más frecuentes
+            word_freq = Counter(words)
+            top_words = word_freq.most_common(3)
+            
+            members_info.append({
+                'name': member,
+                'messages': member_count,
+                'percentage': round(member_count / total_messages * 100, 1),
+                'top_words': top_words
+            })
+        
+        return df, members_info, None
+        
+    except Exception as e:
+        print(f"Error procesando fechas: {str(e)}")
+        return None, None, f"Error procesando el archivo: {str(e)}"
 
 def generate_plots(df):
     """Genera todas las visualizaciones"""
@@ -138,6 +260,30 @@ def generate_plots(df):
         plots['weekly_activity'] = get_plot_url()
         plt.close(fig)
         
+        # 6. Nube de palabras general del grupo
+        text_messages = df[df['type'] == 'text']['message']
+        words = filter_words(text_messages)
+        text = ' '.join(words)
+        
+        stop_words = set(stopwords.words('spanish'))
+        stop_words.update(EXCLUDED_WORDS)
+        
+        wordcloud = WordCloud(
+            width=1200, 
+            height=600, 
+            background_color='white',
+            max_words=150,
+            collocations=False,
+            stopwords=stop_words
+        ).generate(text)
+        
+        fig = plt.figure(figsize=(15, 7.5))
+        plt.imshow(wordcloud, interpolation='bilinear')
+        plt.axis('off')
+        plt.title('Palabras más usadas en el grupo')
+        plots['group_wordcloud'] = get_plot_url()
+        plt.close(fig)
+        
         return plots
     except Exception as e:
         print(f"Error generando gráficas: {str(e)}")
@@ -155,48 +301,26 @@ def get_plot_url():
 def generate_member_wordcloud(df, member):
     """Genera una nube de palabras para un miembro específico"""
     try:
-        # Lista de stopwords en español
-        stopwords = {
-            'a', 'al', 'ante', 'bajo', 'cabe', 'con', 'contra', 'de', 'desde', 'durante',
-            'en', 'entre', 'hacia', 'hasta', 'mediante', 'para', 'por', 'según', 'sin',
-            'sobre', 'tras', 'y', 'e', 'ni', 'que', 'si', 'no', 'el', 'la', 'los', 'las',
-            'un', 'una', 'unos', 'unas', 'lo', 'este', 'esta', 'estos', 'estas', 'ese',
-            'esa', 'esos', 'esas', 'del', 'multimedia', 'omitido', '<multimedia', 'omitido>',
-            'ha', 'he', 'has', 'han', 'hemos', 'habéis', 'había', 'hubo', 'ser', 'es',
-            'soy', 'eres', 'somos', 'sois', 'estar', 'estoy', 'está', 'estamos', 'estáis',
-            'te', 'mi', 'tu', 'su', 'nos', 'os', 'les', 'me', 'se', 'pero', 'más', 'ya',
-            'esto', 'eso', 'aquello', 'quien', 'donde', 'cuando', 'cuanto', 'como',
-            'imagen', 'video', 'audio', 'sticker', 'gif', 'documento', 'eliminado'
-        }
-        
-        # Obtener solo mensajes de texto
+        # Obtener solo mensajes de texto del miembro
         member_messages = df[(df['sender'] == member) & (df['type'] == 'text')]['message']
         
-        # Procesar y filtrar palabras
-        words = []
-        for message in member_messages:
-            # Convertir a minúsculas y dividir en palabras
-            message_words = message.lower().split()
-            # Filtrar palabras no deseadas y palabras cortas
-            filtered_words = [word for word in message_words 
-                            if word not in stopwords 
-                            and len(word) > 3 
-                            and not word.startswith('http')
-                            and not word.startswith('<')
-                            and not word.endswith('>')]
-            words.extend(filtered_words)
+        # Filtrar palabras usando la función auxiliar
+        words = filter_words(member_messages)
         
         # Unir palabras filtradas
         text = ' '.join(words)
         
         # Configurar y generar la nube de palabras
+        stop_words = set(stopwords.words('spanish'))
+        stop_words.update(EXCLUDED_WORDS)
+        
         wordcloud = WordCloud(
             width=800, 
             height=400, 
             background_color='white',
             max_words=100,
             collocations=False,
-            stopwords=stopwords
+            stopwords=stop_words
         ).generate(text)
         
         # Crear una nueva figura con el backend Agg
@@ -212,6 +336,7 @@ def generate_member_wordcloud(df, member):
         # Preparar la imagen para enviar
         img.seek(0)
         return base64.b64encode(img.getvalue()).decode()
+        
     except Exception as e:
         print(f"Error generando nube de palabras: {str(e)}")
         return None
@@ -229,9 +354,14 @@ def upload():
     if file.filename == '':
         return jsonify({'error': 'No se seleccionó ningún archivo'})
     
+    # Obtener el tipo de dispositivo del formulario
+    device_type = request.form.get('device_type')
+    if not device_type:
+        return jsonify({'error': 'No se especificó el tipo de dispositivo'})
+    
     try:
         content = file.read().decode('utf-8')
-        df, members_info, error = process_chat_file(content)
+        df, members_info, error = process_chat_file(content, device_type)
         
         if error:
             return jsonify({'error': error})

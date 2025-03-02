@@ -2,4 +2,5 @@ streamlit==1.31.1
 pandas==2.2.0
 matplotlib==3.8.2
 seaborn==0.13.2
-wordcloud==1.9.3 
+wordcloud==1.9.3
+nltk==3.8.1 
