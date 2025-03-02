@@ -1,29 +1,30 @@
-from flask import Flask, render_template, request, jsonify
-import os
-import re
+import streamlit as st
 import pandas as pd
-import matplotlib
-matplotlib.use('Agg')  # Configurar backend no interactivo antes de importar pyplot
 import matplotlib.pyplot as plt
 import seaborn as sns
 from wordcloud import WordCloud
-from collections import Counter
-import base64
+import re
 from io import BytesIO
+import base64
 from datetime import datetime
+import matplotlib
+matplotlib.use('Agg')
+plt.style.use('seaborn')
 
-# Configuración adicional de matplotlib
-plt.ioff()  # Desactivar modo interactivo
+# Configuración de la página
+st.set_page_config(
+    page_title="📊 Analizador de Chat de WhatsApp",
+    page_icon="📱",
+    layout="wide"
+)
 
-app = Flask(__name__)
+# Título y descripción
+st.title("📊 Analizador de Chat de WhatsApp")
+st.markdown("""
+Esta aplicación analiza chats de WhatsApp y genera visualizaciones estadísticas.
+""")
 
-# Variable global para almacenar los datos del chat
-chat_data = {
-    'df': None,
-    'members': None
-}
-
-def process_chat_file(file_content):
+def process_chat_file(content):
     """Procesa el contenido del archivo de chat"""
     patterns = [
         r'(\d{1,2}/\d{1,2}/\d{2,4},\s\d{1,2}:\d{2})\s-\s([^:]+):\s(.+)',
@@ -35,14 +36,14 @@ def process_chat_file(file_content):
     used_pattern = None
     
     for pattern in patterns:
-        matches = re.findall(pattern, file_content, re.MULTILINE)
+        matches = re.findall(pattern, content, re.MULTILINE)
         if matches:
             used_pattern = pattern
-            print(f"✅ Patrón encontrado: {pattern}")
-            print(f"Mensajes encontrados: {len(matches)}")
+            st.success(f"✅ Se encontraron {len(matches)} mensajes")
             break
     
     if not matches:
+        st.error("No se encontró un patrón válido en el archivo")
         return None, None, "No se encontró un patrón válido en el archivo"
     
     # Crear DataFrame
@@ -73,8 +74,11 @@ def process_chat_file(file_content):
         # Obtener palabras más frecuentes
         text_messages = member_messages[member_messages['type'] == 'text']['message'].tolist()
         words = ' '.join(text_messages).lower().split()
-        word_freq = Counter([w for w in words if len(w) > 3])
-        top_words = word_freq.most_common(3)
+        word_freq = {}
+        for word in words:
+            if len(word) > 3:
+                word_freq[word] = word_freq.get(word, 0) + 1
+        top_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:3]
         
         members_info.append({
             'name': member,
@@ -87,70 +91,65 @@ def process_chat_file(file_content):
 
 def generate_plots(df):
     """Genera todas las visualizaciones"""
-    plots = {}
+    col1, col2 = st.columns(2)
     
-    try:
+    with col1:
         # 1. Mensajes por persona
-        fig, ax = plt.subplots(figsize=(12, 6))
+        st.subheader("📊 Mensajes por Persona")
+        fig, ax = plt.subplots(figsize=(10, 6))
         messages_per_person = df['sender'].value_counts().head(20)
         messages_per_person.plot(kind='bar', color='skyblue', ax=ax)
         plt.title('Top 20: Mensajes por persona')
         plt.xlabel('Miembro')
         plt.ylabel('Número de mensajes')
-        plt.xticks(rotation=45)
-        plots['messages_per_person'] = get_plot_url()
-        plt.close(fig)
+        plt.xticks(rotation=45, ha='right')
+        st.pyplot(fig)
+        plt.close()
         
-        # 2. Actividad a lo largo del tiempo
-        fig, ax = plt.subplots(figsize=(12, 6))
+        # 2. Distribución de tipos de mensajes
+        st.subheader("📱 Tipos de Mensajes")
+        fig, ax = plt.subplots(figsize=(8, 8))
+        type_counts = df['type'].value_counts()
+        type_counts.plot(kind='pie', autopct='%1.1f%%', colors=['lightcoral', 'lightblue'], ax=ax)
+        plt.title('Distribución de tipos de mensajes')
+        st.pyplot(fig)
+        plt.close()
+    
+    with col2:
+        # 3. Actividad diaria
+        st.subheader("📈 Actividad Diaria")
+        fig, ax = plt.subplots(figsize=(10, 6))
         daily_activity = df.resample('D', on='datetime').size()
         daily_activity.plot(kind='line', color='green', ax=ax)
         plt.title('Actividad diaria del chat')
         plt.xlabel('Fecha')
         plt.ylabel('Número de mensajes')
-        plots['daily_activity'] = get_plot_url()
-        plt.close(fig)
-        
-        # 3. Distribución de tipos de mensajes
-        fig, ax = plt.subplots(figsize=(8, 8))
-        type_counts = df['type'].value_counts()
-        type_counts.plot(kind='pie', autopct='%1.1f%%', colors=['lightcoral', 'lightblue'], ax=ax)
-        plt.title('Distribución de tipos de mensajes')
-        plots['message_types'] = get_plot_url()
-        plt.close(fig)
+        st.pyplot(fig)
+        plt.close()
         
         # 4. Actividad por hora
-        fig, ax = plt.subplots(figsize=(12, 6))
+        st.subheader("🕒 Actividad por Hora")
+        fig, ax = plt.subplots(figsize=(10, 6))
         df['hour'].value_counts().sort_index().plot(kind='bar', ax=ax)
         plt.title('Actividad por hora del día')
         plt.xlabel('Hora')
         plt.ylabel('Número de mensajes')
-        plots['hourly_activity'] = get_plot_url()
-        plt.close(fig)
-        
-        # 5. Actividad por día de la semana
-        fig, ax = plt.subplots(figsize=(12, 6))
-        day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        df['day_of_week'].value_counts().reindex(day_order).plot(kind='bar', ax=ax)
-        plt.title('Actividad por día de la semana')
-        plt.xlabel('Día')
-        plt.ylabel('Número de mensajes')
-        plots['weekly_activity'] = get_plot_url()
-        plt.close(fig)
-        
-        return plots
-    except Exception as e:
-        print(f"Error generando gráficas: {str(e)}")
-        return {}
-
-def get_plot_url():
-    """Convierte el plot actual en una URL de imagen"""
-    img = BytesIO()
-    plt.savefig(img, format='png', bbox_inches='tight')
+        st.pyplot(fig)
+        plt.close()
+    
+    # 5. Actividad por día de la semana
+    st.subheader("📅 Actividad Semanal")
+    fig, ax = plt.subplots(figsize=(10, 6))
+    day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    day_names_es = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+    activity = df['day_of_week'].value_counts().reindex(day_order)
+    activity.index = day_names_es
+    activity.plot(kind='bar', ax=ax)
+    plt.title('Actividad por día de la semana')
+    plt.xlabel('Día')
+    plt.ylabel('Número de mensajes')
+    st.pyplot(fig)
     plt.close()
-    img.seek(0)
-    plot_url = base64.b64encode(img.getvalue()).decode()
-    return f'data:image/png;base64,{plot_url}'
 
 def generate_member_wordcloud(df, member):
     """Genera una nube de palabras para un miembro específico"""
@@ -199,76 +198,76 @@ def generate_member_wordcloud(df, member):
             stopwords=stopwords
         ).generate(text)
         
-        # Crear una nueva figura con el backend Agg
-        fig = plt.figure(figsize=(10, 5))
-        plt.imshow(wordcloud, interpolation='bilinear')
-        plt.axis('off')
+        # Crear y mostrar la figura
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.imshow(wordcloud, interpolation='bilinear')
+        ax.axis('off')
+        st.pyplot(fig)
+        plt.close()
         
-        # Guardar la imagen en memoria
-        img = BytesIO()
-        fig.savefig(img, format='png', bbox_inches='tight', pad_inches=0)
-        plt.close(fig)  # Cerrar la figura explícitamente
-        
-        # Preparar la imagen para enviar
-        img.seek(0)
-        return base64.b64encode(img.getvalue()).decode()
     except Exception as e:
-        print(f"Error generando nube de palabras: {str(e)}")
-        return None
+        st.error(f"Error generando nube de palabras: {str(e)}")
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Sidebar
+st.sidebar.header("📤 Subir Chat")
+uploaded_file = st.sidebar.file_uploader("Selecciona un archivo de chat", type=['txt'])
 
-@app.route('/upload', methods=['POST'])
-def upload():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No se subió ningún archivo'})
+if uploaded_file:
+    # Leer y procesar el archivo
+    content = uploaded_file.getvalue().decode('utf-8')
+    df, members_info, error = process_chat_file(content)
     
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No se seleccionó ningún archivo'})
+    if error:
+        st.error(error)
+    else:
+        # Mostrar estadísticas generales
+        st.header("📊 Estadísticas Generales")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total de Mensajes", len(df))
+        with col2:
+            st.metric("Participantes", len(members_info))
+        with col3:
+            st.metric("Período", f"{df['datetime'].min().strftime('%d/%m/%y')} - {df['datetime'].max().strftime('%d/%m/%y')}")
+        
+        # Generar visualizaciones
+        generate_plots(df)
+        
+        # Selector de miembro
+        st.header("👤 Análisis por Miembro")
+        selected_member = st.selectbox(
+            "Selecciona un miembro para ver sus estadísticas:",
+            options=[m['name'] for m in members_info]
+        )
+        
+        if selected_member:
+            # Mostrar información del miembro
+            member_info = next(m for m in members_info if m['name'] == selected_member)
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader(f"Estadísticas de {selected_member}")
+                st.write(f"📝 Mensajes: {member_info['messages']}")
+                st.write(f"📊 Porcentaje del chat: {member_info['percentage']}%")
+                st.write("🔤 Palabras más usadas:")
+                for word, count in member_info['top_words']:
+                    st.write(f"- {word}: {count} veces")
+            
+            with col2:
+                st.subheader("🔤 Nube de Palabras")
+                generate_member_wordcloud(df, selected_member)
+else:
+    # Instrucciones cuando no hay archivo
+    st.info("👋 ¡Bienvenido al Analizador de Chat de WhatsApp!")
+    st.markdown("""
+    Para comenzar:
+    1. Exporta un chat de WhatsApp (sin medios)
+    2. Sube el archivo .txt usando el botón en el panel izquierdo
+    3. Explora las estadísticas y visualizaciones
     
-    try:
-        content = file.read().decode('utf-8')
-        df, members_info, error = process_chat_file(content)
-        
-        if error:
-            return jsonify({'error': error})
-        
-        # Guardar DataFrame en la variable global
-        chat_data['df'] = df
-        chat_data['members'] = members_info
-        
-        plots = generate_plots(df)
-        
-        return jsonify({
-            'success': True,
-            'members': members_info,
-            'plots': plots
-        })
-    except Exception as e:
-        return jsonify({'error': f'Error procesando el archivo: {str(e)}'})
+    ℹ️ Los datos se procesan localmente y no se almacenan en ningún servidor.
+    """)
 
-@app.route('/member_wordcloud', methods=['POST'])
-def get_member_wordcloud():
-    data = request.json
-    member = data.get('member')
-    
-    if not member:
-        return jsonify({'error': 'Falta el miembro'})
-    
-    if chat_data['df'] is None:
-        return jsonify({'error': 'No hay datos de chat cargados'})
-    
-    try:
-        wordcloud = generate_member_wordcloud(chat_data['df'], member)
-        return jsonify({
-            'success': True,
-            'wordcloud': wordcloud
-        })
-    except Exception as e:
-        return jsonify({'error': f'Error generando nube de palabras: {str(e)}'})
-
-if __name__ == '__main__':
-    app.run(debug=True) 
+# Footer
+st.markdown("---")
+st.markdown("Desarrollado con ❤️ usando Streamlit") 

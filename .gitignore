@@ -1,32 +1,51 @@
-# Entorno virtual
-.venv/
-venv/
-env/
-
-# Archivos de chat y datos sensibles
-*.txt
-!requirements.txt
-Chat*.txt
-
-# Cache de Python
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Distribución / empaquetado
-dist/
+*.so
+.Python
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 *.egg-info/
+.installed.cfg
+*.egg
 
-# Archivos de IDE
+# Virtual Environment
+venv/
+.venv/
+ENV/
+
+# IDEs
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# Archivos de sistema
+# Sistema operativo
 .DS_Store
 Thumbs.db
+
+# Streamlit
+.streamlit/
+
+# Archivos de chat
+*.txt
+!requirements.txt
+
+# Archivos temporales
+*.log
+.cache/
+*.tmp
 
 # Archivos de Jupyter Notebook
 .ipynb_checkpoints
@@ -34,8 +53,4 @@ Thumbs.db
 
 # Archivos de ambiente
 .env
-.env.*
-
-# Archivos temporales
-*.log
-*.tmp 
+.env.* 
